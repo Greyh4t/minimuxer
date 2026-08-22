@@ -70,6 +70,10 @@ internal final class IdeviceGateway {
         return "Error code \(err.pointee.code)"
     }
 
+    private func describeError(_ err: UnsafeMutablePointer<IdeviceFfiError>) -> String {
+        "code=\(err.pointee.code), subCode=\(err.pointee.sub_code), message=\(getErrorMessage(from: err))"
+    }
+
     private func safeFreeError(_ err: UnsafeMutablePointer<IdeviceFfiError>?) {
         guard let err = err else { return }
         let addr = Int(bitPattern: err)
@@ -696,8 +700,9 @@ internal final class IdeviceGateway {
             verboseLog("[IdeviceGateway] fetchUDID() connecting lockdownd_connect_rsd")
             var connectErr = lockdownd_connect_rsd(adapter, handshake, &lockdownClient)
             if let firstErr = connectErr {
-                debugLog("[IdeviceGateway] fetchUDID() lockdownd_connect_rsd failed on existing connection, invalidating and retrying with fresh connection")
-                idevice_error_free(firstErr)
+                let details = describeError(firstErr)
+                debugLog("[IdeviceGateway] fetchUDID() lockdownd_connect_rsd failed on existing connection (\(details)); adapter=\(String(describing: adapter)), handshake=\(String(describing: handshake)); current behavior invalidates the connection and retries with a fresh RP tunnel")
+                safeFreeError(firstErr)
                 invalidateConnection()
                 
                 do {
@@ -705,8 +710,9 @@ internal final class IdeviceGateway {
                     guard let freshAdapter = self.adapter, let freshHandshake = self.handshake else { return nil }
                     connectErr = lockdownd_connect_rsd(freshAdapter, freshHandshake, &lockdownClient)
                     if let secondErr = connectErr {
-                        debugLog("[IdeviceGateway] fetchUDID() lockdownd_connect_rsd retry failed")
-                        idevice_error_free(secondErr)
+                        let details = describeError(secondErr)
+                        debugLog("[IdeviceGateway] fetchUDID() lockdownd_connect_rsd retry failed (\(details)); freshAdapter=\(String(describing: freshAdapter)), freshHandshake=\(String(describing: freshHandshake)); invalidating the fresh RP tunnel")
+                        safeFreeError(secondErr)
                         invalidateConnection()
                         return nil
                     }
@@ -725,7 +731,8 @@ internal final class IdeviceGateway {
             verboseLog("[IdeviceGateway] fetchUDID() calling lockdownd_get_value for UniqueDeviceID")
             let valErr = lockdownd_get_value(client, "UniqueDeviceID", nil, &plistVal)
             if let valErr = valErr {
-                debugLog("[IdeviceGateway] fetchUDID() lockdownd_get_value failed")
+                let details = describeError(valErr)
+                debugLog("[IdeviceGateway] fetchUDID() lockdownd_get_value(UniqueDeviceID) failed (\(details)); preserving the RP tunnel because the lockdownd service connection itself succeeded")
                 safeFreeError(valErr)
                 return nil
             }
