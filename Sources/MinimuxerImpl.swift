@@ -279,6 +279,10 @@ final internal class MinimuxerImpl: MinimuxerAPI {
         retargetUsbmuxdAddr()
         // start our fake usbmuxd server for lockdown protocol based clients if required
         try await restartMuxerServer()
+        if !isrppairing {
+            debugLog("[minimuxer] Starting Lockdown heartbeat service")
+            await HeartbeatService.start()
+        }
         
         do {
             try await mountDDI(docsPath: mountPath)
@@ -301,6 +305,7 @@ final internal class MinimuxerImpl: MinimuxerAPI {
             return task
         }
         _ = await oldTask?.result       // await cancelled mount task completion
+        await HeartbeatService.stop()
         await MuxerService.shared.stop()
         // mark ready!
         await state.with {

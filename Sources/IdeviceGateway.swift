@@ -747,39 +747,29 @@ internal final class IdeviceGateway {
             debugLog("[IdeviceGateway] fetchUDID() plistVal is nil")
             return nil
         } else {
-            var conn: OpaquePointer? = nil
-            let err = idevice_usbmuxd_new_default_connection(0, &conn)
-            if let err = err {
-                let msg = self.getErrorMessage(from: err)
-                debugLog("[IdeviceGateway] fetchUDID new_default_connection failed: code=\(err.pointee.code), message=\(msg)")
-                idevice_error_free(err)
-                return nil
-            }
-            
-            if let conn = conn {
-                defer { idevice_usbmuxd_connection_free(conn) }
-                var devices: UnsafeMutablePointer<OpaquePointer?>? = nil
-                var count: Int32 = 0
-                let devErr = idevice_usbmuxd_get_devices(conn, &devices, &count)
-                if let devErr = devErr {
-                    let msg = self.getErrorMessage(from: devErr)
-                    debugLog("[IdeviceGateway] fetchUDID get_devices failed: code=\(devErr.pointee.code), message=\(msg)")
-                    idevice_error_free(devErr)
+            debugLog("[IdeviceGateway] fetchUDID() validating Lockdown pairing against the device instead of trusting the locally advertised pair-record UDID")
+            return try performWithTcpService(
+                connect: lockdownd_connect,
+                cleanup: lockdownd_client_free,
+                serviceName: "lockdownd UDID"
+            ) { lockdownClient in
+                var plistVal: plist_t? = nil
+                let valErr = lockdownd_get_value(lockdownClient, "UniqueDeviceID", nil, &plistVal)
+                if let valErr = valErr {
+                    let details = describeError(valErr)
+                    debugLog("[IdeviceGateway] fetchUDID() Lockdown lockdownd_get_value(UniqueDeviceID) failed (\(details))")
+                    safeFreeError(valErr)
                     return nil
                 }
-                
-                var udidResult: String? = nil
-                if count > 0, let devicesPtr = devices, let firstDev = devicesPtr.pointee {
-                    defer { idevice_usbmuxd_device_list_free(devices, count) }
-                    if let udidPtr = idevice_usbmuxd_device_get_udid(firstDev) {
-                        udidResult = String(cString: udidPtr)
-                        idevice_string_free(udidPtr)
-                    }
+                guard let plistVal = plistVal else {
+                    debugLog("[IdeviceGateway] fetchUDID() Lockdown UniqueDeviceID response contained no plist value")
+                    return nil
                 }
-                verboseLog("[IdeviceGateway] fetchUDID get_devices count: \(count), udid: \(udidResult ?? "nil")")
-                return udidResult
+                defer { safeFreePlist(plistVal) }
+                let udid = getRustPlistString(plistVal)
+                debugLog("[IdeviceGateway] fetchUDID() Lockdown device query returned UDID: \(udid ?? "nil")")
+                return udid
             }
-            return nil
         }
     }
 
