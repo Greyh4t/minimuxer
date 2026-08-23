@@ -27,8 +27,8 @@ let package = Package(
 //        ),
          .binaryTarget(
              name: "IDevice",
-             url: "https://github.com/Greyh4t/idevice/releases/download/v0.1.65-ss-adapterdiag1/bundle.zip",
-             checksum: "5ae450079257e9fd404de02d5e9d0650e75600b410a067902ea777eaf2488b93"
+             url: "https://github.com/Greyh4t/idevice/releases/download/v0.1.65-ss-adapterdiag2/bundle.zip",
+             checksum: "bf3dbc01e660fdd5a2dce1ad4f5c9ea1f5090ada34ac94ae3db2eca2b4164ab7"
          ),
 //        .binaryTarget(
 //            name: "IDevice",
